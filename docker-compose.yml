@@ -1,0 +1,164 @@
+name: sec-detect-lab
+
+networks:
+  secnet:
+    driver: bridge          # isolated L2 segment; containers resolve each other by service name
+
+volumes:
+  kafka-data:               # named volumes = data survives `compose down`; only `down -v` destroys
+  minio-data:
+  opensearch-data:
+  fb-state:                 # Fluent Bit filesystem buffer — survives container restarts/kills
+  cribl-data:               # Cribl Stream CRIBL_HOME — pipelines, routes, state
+
+services:
+  # =========================================================================
+  # KAFKA — durable commit log / decoupling buffer
+  # =========================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    container_name: kafka
+    hostname: kafka
+    networks: [secnet]
+    ports:
+      - "9092:9092"          # host/LAN access (192.168.1.176:9092) for tooling off the docker network
+    environment:
+      CLUSTER_ID: "4L6g3nShT-eMCtK--X86Ow"            # KRaft cluster ID (base64 16-byte UUID), pre-generated
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"        # combined mode (lab); split roles in prod
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      # Three listeners, three audiences: in-network containers, controller quorum, off-network hosts
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://192.168.1.176:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1       # single node; MUST be 3 in prod
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"        # topics are provisioned deliberately, never by accident
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0       # dev convenience; prod default 3000ms avoids rebalance storms
+      KAFKA_LOG_RETENTION_HOURS: 168                  # 7-day broker-level default; overridden per-topic in Phase 2
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # =========================================================================
+  # MINIO — S3-compatible cold tier (compliance + replay source)
+  # =========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    networks: [secnet]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin            # LAB ONLY — prod: IAM/OIDC, never root creds in env
+      MINIO_ROOT_PASSWORD: minioadmin123     # LAB ONLY
+    ports:
+      - "9000:9000"   # S3 API — this is what Cribl talks to
+      - "9001:9001"   # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio-init:                 # one-shot job: provision the cold-tier bucket, then exit
+    image: minio/mc:latest
+    container_name: minio-init
+    networks: [secnet]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin123 &&
+      mc mb --ignore-existing local/cold-tier-raw &&
+      echo '--- buckets ---' && mc ls local
+      "
+
+  # =========================================================================
+  # OPENSEARCH — hot tier / SIEM & detection engine
+  # =========================================================================
+  opensearch:
+    image: opensearchproject/opensearch:2.19.0
+    container_name: opensearch
+    networks: [secnet]
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"       # LAB ONLY — entrypoint-level toggle (raw plugins.security.disabled
+      DISABLE_INSTALL_DEMO_CONFIG: "true"   # env gets defeated by the demo installer hard-exit on 2.12+)
+      bootstrap.memory_lock: "true"         # pin the heap: never let the JVM swap
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g" # equal min/max = no heap resize pauses; heap <= 50% RAM (Lucene mmap)
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"   # REST API; 9600 (perf analyzer) intentionally left closed
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  # =========================================================================
+  # KAFKA-TOPICS-INIT — explicit topic governance (auto-create stays OFF)
+  # =========================================================================
+  kafka-topics-init:
+    image: confluentinc/cp-kafka:7.8.0
+    container_name: kafka-topics-init
+    networks: [secnet]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: >
+      bash -c "
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic logs.k8s-audit --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic logs.host-syslog --partitions 3 --replication-factor 1 &&
+      echo '--- topics ---' && kafka-topics --bootstrap-server kafka:29092 --describe
+      "
+
+  # =========================================================================
+  # FLUENT BIT — edge collector / shipper (Phase 2)
+  # =========================================================================
+  fluent-bit:
+    image: fluent/fluent-bit:3.2
+    container_name: fluent-bit
+    networks: [secnet]
+    depends_on:
+      kafka-topics-init:
+        condition: service_completed_successfully     # topics exist before we ship
+    volumes:
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - /var/log:/host-logs:ro                        # host telemetry, read-only
+      - /var/log/k3s-audit:/k8s-audit:ro              # REAL k3s audit log (direct bind of the exact dir)
+      - fb-state:/var/log/flb-storage                 # durable buffer across restarts
+
+  # =========================================================================
+  # CRIBL STREAM — telemetry pipeline engine (Phase 3)
+  # =========================================================================
+  cribl:
+    image: cribl/cribl:latest
+    container_name: cribl
+    networks: [secnet]
+    ports:
+      - "19000:9000"   # UI/API remapped off 9000: that port belongs to MinIO's S3 API
+    volumes:
+      - cribl-data:/opt/cribl          # ALL Cribl config/state lives under CRIBL_HOME
+    depends_on:
+      kafka:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy

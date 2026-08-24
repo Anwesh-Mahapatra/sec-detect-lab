@@ -1,0 +1,36 @@
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - "RequestReceived"
+rules:
+  # Container shell access - MITRE T1609
+  - level: RequestResponse
+    resources:
+      - group: ""
+        resources: ["pods/exec", "pods/attach", "pods/portforward"]
+
+  # Credential access
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["secrets", "serviceaccounts/token"]
+
+  # Privilege escalation via RBAC
+  - level: RequestResponse
+    resources:
+      - group: "rbac.authorization.k8s.io"
+        resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+
+  # Drop internal chatter - this is 95% of the volume
+  - level: None
+    userGroups: ["system:nodes", "system:serviceaccounts:kube-system"]
+  - level: None
+    users: ["system:apiserver", "system:kube-scheduler", "system:kube-controller-manager"]
+
+  # Anything that changes cluster state
+  - level: Metadata
+    verbs: ["create", "update", "patch", "delete"]
+
+  # Drop read noise
+  - level: None
+    verbs: ["get", "list", "watch"]

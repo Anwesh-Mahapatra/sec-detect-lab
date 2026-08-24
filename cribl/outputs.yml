@@ -1,0 +1,137 @@
+outputs:
+  opensearch:
+    systemFields:
+      - cribl_pipe
+    streamtags: []
+    loadBalanced: true
+    concurrency: 5
+    maxPayloadSizeKB: 4096
+    maxPayloadEvents: 0
+    compress: true
+    rejectUnauthorized: false
+    timeoutSec: 30
+    maxConnectionReuseSec: 120
+    flushPeriodSec: 1
+    failedRequestLoggingMode: none
+    safeHeaders: []
+    responseRetrySettings:
+      - httpStatus: 401
+        initialBackoff: 1000
+        backoffRate: 2
+        maxBackoff: 20000
+      - httpStatus: 403
+        initialBackoff: 1000
+        backoffRate: 2
+        maxBackoff: 20000
+      - httpStatus: 408
+        initialBackoff: 250
+        backoffRate: 2
+        maxBackoff: 10000
+      - httpStatus: 429
+        initialBackoff: 1000
+        backoffRate: 2
+        maxBackoff: 10000
+      - httpStatus: 500
+        initialBackoff: 250
+        backoffRate: 2
+        maxBackoff: 10000
+      - httpStatus: 502
+        initialBackoff: 250
+        backoffRate: 2
+        maxBackoff: 10000
+      - httpStatus: 503
+        initialBackoff: 250
+        backoffRate: 2
+        maxBackoff: 10000
+      - httpStatus: 504
+        initialBackoff: 250
+        backoffRate: 2
+        maxBackoff: 10000
+      - httpStatus: 509
+        initialBackoff: 250
+        backoffRate: 2
+        maxBackoff: 10000
+    timeoutRetrySettings:
+      timeoutRetry: true
+      initialBackoff: 1000
+      backoffRate: 2
+      maxBackoff: 10000
+    responseHonorRetryAfterHeader: true
+    extraParams:
+      - name: filter_path
+        value: errors,items.*.error,items.*._index,items.*.status
+    auth:
+      disabled: true
+    elasticVersion: auto
+    includeDocId: false
+    writeAction: create
+    retryPartialErrors: false
+    onBackpressure: queue
+    excludeSelf: false
+    urls:
+      - weight: 1
+        url: http://opensearch:9200/_bulk
+    dnsResolvePeriodSec: 600
+    loadBalanceStatsPeriodSec: 300
+    pqMaxFileSize: 10MB
+    pqMaxSize: 5GB
+    pqPath: $CRIBL_HOME/state/queues
+    pqCompress: none
+    pqOnBackpressure: block
+    pqMode: backpressure
+    pqMaxBufferSizeBytes: 1MB
+    pqControls: {}
+    pqMaxBackpressureSec: 30
+    pqStrictOrdering: true
+    type: elastic
+    index: logs-k8s-audit
+  minio-cold-tier:
+    systemFields:
+      - cribl_pipe
+    streamtags: []
+    awsAuthenticationMethod: manual
+    reuseConnections: true
+    rejectUnauthorized: true
+    destPath: "'k8s-audit/'"
+    maxConcurrentFileParts: 4
+    verifyPermissions: true
+    maxClosingFilesToBackpressure: 100
+    stagePath: $CRIBL_HOME/state/outputs/staging
+    addIdToStagePath: true
+    removeEmptyDirs: true
+    partitionExpr: "C.Time.strftime(_time ? _time : Date.now()/1000, '%Y/%m/%d')"
+    format: json
+    baseFileName: "`CriblOut`"
+    fileNameSuffix: '`.${C.env["CRIBL_WORKER_ID"]}.${__format}${__compression ===
+      "gzip" ? ".gz" : ""}`'
+    maxFileSizeMB: 32
+    maxFileOpenTimeSec: 300
+    maxFileIdleTimeSec: 30
+    maxOpenFiles: 100
+    headerLine: ""
+    writeHighWaterMark: 64
+    onBackpressure: block
+    deadletterEnabled: true
+    onDiskFullBackpressure: block
+    forceCloseOnShutdown: true
+    retrySettings:
+      enabled: true
+      initialBackoffMs: 10000
+      backoffMultiplier: 2
+      maxBackoffMs: 60000
+      jitterPercent: 25
+    orphans:
+      disabled: false
+      periodMin: 10
+    objectACL: private
+    compress: gzip
+    compressionLevel: best_speed
+    emptyDirCleanupSec: 300
+    directoryBatchSize: 1000
+    deadletterPath: $CRIBL_HOME/state/outputs/dead-letter
+    maxRetryNum: 20
+    type: minio
+    endpoint: http://minio:9000
+    bucket: cold-tier-raw
+    awsApiKey: minioadmin
+    awsSecretKey: "<REDACTED — Cribl-encrypted, regenerate locally>"

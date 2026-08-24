@@ -1,0 +1,25 @@
+# Runtime state — never commit
+*.db
+*.db-shm
+*.db-wal
+flb-storage/
+cribl-data/
+opensearch-data/
+minio-data/
+kafka-data/
+
+# Local audit data (contains real cluster activity)
+audit.log
+*.log
+
+# Cribl secrets — regenerate locally, never publish
+cribl/local/cribl/auth/
+cribl.secret
+*.pem
+*.key
+k3s.yaml
+kubeconfig
+
+# Editor / OS noise
+.DS_Store
+*.swp

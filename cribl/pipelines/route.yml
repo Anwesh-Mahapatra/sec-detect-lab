@@ -1,0 +1,35 @@
+id: default
+groups: {}
+comments: []
+routes:
+  - id: default
+    name: default
+    final: true
+    disabled: true
+    pipeline: main
+    description: ""
+    enableOutputExpression: false
+    filter: "true"
+    clones: []
+    output: default
+  - id: mupLt9
+    name: minio-cold-tier
+    final: false
+    disabled: false
+    pipeline: passthru
+    description: ""
+    enableOutputExpression: false
+    filter: "true"
+    clones:
+      - {}
+    output: minio-cold-tier
+  - id: 60Nnbk
+    name: k8s_audit_logs_opensearch
+    final: true
+    disabled: false
+    pipeline: k8s-normalize
+    description: ""
+    enableOutputExpression: false
+    filter: "true"
+    clones: []
+    output: opensearch

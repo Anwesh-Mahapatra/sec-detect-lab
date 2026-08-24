@@ -1,0 +1,134 @@
+output: default
+streamtags:
+  - normalization
+groups: {}
+asyncFuncTimeout: 1000
+functions:
+  - id: drop
+    filter: verb == 'watch'
+    disabled: false
+    conf: {}
+  - id: code
+    filter: "true"
+    conf:
+      maxNumOfIterations: 5000
+      activeLogSampleRate: 1000
+      useUniqueLogChannel: true
+      code: |-
+        const u   = __e.user || {};
+        const imp = __e.impersonatedUser;              // present only when --as / impersonation used
+        const eff = imp || u;                          // effective identity = the one whose perms were used
+        const o   = __e.objectRef || {};
+        const rs  = __e.responseStatus;
+        const an  = __e.annotations || {};
+
+        const endMs   = Date.parse(__e.stageTimestamp);
+        const startMs = Date.parse(__e.requestReceivedTimestamp);
+
+        const isSA = String(eff.username || '').startsWith('system:serviceaccount:');
+        const saNs = isSA ? eff.username.split(':')[2] : undefined;
+
+        // Audit `verb` values only. connect/impersonate/bind/escalate are RBAC-only verbs
+        // and never appear here — removed after they produced zero buckets in testing.
+        const VERB = { create:1, get:2, list:2, watch:2, update:3, patch:3,
+                       delete:4, deletecollection:4 };
+
+        // exec/attach/portforward arrive as verb=get|create with a subresource, so a literal
+        // verb map files a container shell as Read(2) — indistinguishable from `kubectl get pod`.
+        // Deliberate deviation from the verb map: promote to 99/Other so activity_id alone
+        // carries the signal and no rule author has to know to check resources.type.
+        const HIGH_RISK_SUB = { exec:1, attach:1, portforward:1 };
+
+        const actId = HIGH_RISK_SUB[o.subresource] ? 99 : (VERB[__e.verb] || 0);
+        const ACT   = {0:'Unknown',1:'Create',2:'Read',3:'Update',4:'Delete',99:'Other'};
+
+        // 0 = Unknown on stages with no response yet. Currently unreachable: the audit policy
+        // omits RequestReceived. Keep — it becomes live the moment that stage is enabled.
+        const statusId = rs ? (rs.code < 400 ? 1 : 2) : 0;
+        const STATUS   = {0:'Unknown',1:'Success',2:'Failure'};
+
+        const srcIp = (__e.sourceIPs || [])[0];
+
+        const out = {
+          class_uid: 6003, class_name: 'API Activity',
+          category_uid: 6, category_name: 'Application Activity',
+          activity_id: actId, activity_name: ACT[actId],
+          type_uid: 600300 + actId, type_name: 'API Activity: ' + ACT[actId],
+
+          time: endMs, start_time: startMs, end_time: endMs,
+          duration: endMs - startMs,
+          '@timestamp': new Date(endMs).toISOString(),
+
+          status_id: statusId, status: STATUS[statusId],
+          status_code: rs ? String(rs.code) : undefined,
+          status_detail: rs ? rs.message : undefined,
+
+          severity_id: statusId === 2 ? 2 : 1,
+          severity:    statusId === 2 ? 'Low' : 'Informational',
+
+          // actor.user = the identity whose permissions were actually exercised.
+          // invoked_by = the authenticated principal behind it, when impersonating.
+          actor: {
+            user: {
+              name: eff.username, uid: eff.uid,
+              type_id: isSA ? 3 : 1, type: isSA ? 'System' : 'User',
+              domain: saNs,
+              groups: (eff.groups || []).map(g => ({ name: g }))
+            },
+            invoked_by: imp ? u.username : undefined
+          },
+
+          src_endpoint: srcIp ? { ip: srcIp } : { name: 'unknown' },
+
+          api: {
+            operation: __e.verb,
+            version:   o.apiVersion,
+            service:   { name: 'kube-apiserver' },
+            request:   { uid: __e.auditID },
+            response:  rs ? { code: rs.code, message: rs.message } : undefined
+          },
+
+          http_request: {
+            url: { url_string: __e.requestURI },
+            user_agent: __e.userAgent
+          },
+
+          metadata: {
+            version: '1.3.0',
+            product: { name: 'kube-apiserver', vendor_name: 'Kubernetes', feature: { name: 'audit' } },
+            uid: __e.auditID + ':' + __e.stage,   // unique per row
+            correlation_uid: __e.auditID,         // joins the stages of one request
+            original_time: __e.stageTimestamp,    // full microsecond precision, kept as string
+            log_level: __e.level,
+            log_name: 'k8s-audit',
+            labels: [__e.env, __e.lab_node].filter(Boolean)
+          },
+
+          unmapped: {
+            stage: __e.stage,
+            authz_decision: an['authorization.k8s.io/decision'],
+            authz_reason:   an['authorization.k8s.io/reason'],
+            impersonated:   !!imp,                // single term query for all impersonation
+            original_user:  imp ? u.username : undefined,
+            original_user_groups: imp ? (u.groups || []) : undefined,
+            user_extra:     eff.extra
+          }
+        };
+
+        if (o.resource) {
+          // name falls back to the resource plural on collection-level calls (list/watch with
+          // no specific object). Known-lossy: rules needing "which specific object" must guard
+          // on name !== type.
+          const r = { name: o.name || o.resource,
+                      type: o.subresource ? o.resource + '/' + o.subresource : o.resource };
+          if (o.namespace) r.namespace = o.namespace;
+          out.resources = [r];
+        }
+
+        // Build fresh + wipe, rather than mutate: guarantees no raw k8s field survives past
+        // the schema's additionalProperties:false.
+        Object.keys(__e).forEach(k => { if (k[0] !== '_') delete __e[k]; });
+        Object.assign(__e, out);
+        __e._time = endMs / 1000;
+    final: true
+description: OCSF Schema Enforcement

@@ -1,0 +1,19 @@
+Why fluent bit:
+	- Lightweight, consuming less than a MB, compared to logstash which forces Java run on each host
+	- Stores un-shipped logs directly on the hard-drive, data survives if the host or container abruptly restarts
+	- Uses librdkafka library for reliable kafka connections
+
+2 sources for the lab:
+	- Linux audit log flowing to a topic
+	- Kubernetes audit log flowing to another topic
+	- Routing done via labels
+
+Creating 3 partitions upfront will let cribl worker threads process data simultaneously
+Zero Data Loss config:
+	- Kafka only says "received" after all backup nodes write the log safely to the disk. acks=all
+	- If shipping fails due to network glitch, fluent retries forever instead of dropping logs. Retry_Limit: false
+	- Logs queue safely on disk if the memory fills up or the shipper restarts. storage.type: filesystem
+
+
+queue.buffering.max.ms: 100
+Meaning only the logs collected in that 100 millisecond to time would be lost, wiped off coz librdkafka keeps it in RAM and that will be lost 

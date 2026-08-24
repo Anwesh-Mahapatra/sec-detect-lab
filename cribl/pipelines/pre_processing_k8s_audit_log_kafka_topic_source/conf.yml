@@ -1,0 +1,21 @@
+output: default
+streamtags:
+  - PHI_DATA_MASKING
+groups: {}
+asyncFuncTimeout: 1000
+functions:
+  - id: eval
+    filter: "true"
+    conf:
+      printUndefineds: false
+      add:
+        - disabled: false
+          name: requestObject
+          value: "objectRef && objectRef.resource == 'secrets' ? '__MASKED__' :
+            requestObject"
+        - disabled: false
+          name: responseObject
+          value: "objectRef && objectRef.resource == 'secrets' ? '__MASKED__' :
+            responseObject"
+    final: true
+description: Sanitize secrets at the Cribl Source before routing

@@ -1,0 +1,6 @@
+Consider these situations
+	- The PII is something structural. Like key-value pairs. something schema/context based => Eval Function
+	- The PII is coming in something unpredictable, like for example email in syslog logs or credit card number in app logs => Mask Function (Regex Match)
+	- Sometimes for correlation purpose, you need to identify the exact PII without revealing the exact PII => Mask with hashing, in that way every Mask is different
+
+

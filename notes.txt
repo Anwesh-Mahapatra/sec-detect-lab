@@ -1,0 +1,43 @@
+A single lucene instance has limits on how fast it can index and search data
+
+Horizontal scaling without asking anyone to increase RAM or storage is important
+	- For horizontal scaling, data is split into multiple lucene instances
+	- These are called shards
+	- Elasticsearch acts as a management layer distributing these shards across servers to balance the workload
+		- Datasets are organised into indices
+		- An index is the logical grouping of shards sharing the same metadata or configurations
+
+A single working instance of elasticsearch is called as a node
+
+Collection of nodes are called clusters
+	- Clusters assign different roles to each node
+	- Master Node handles cluster specific operations like managing indices and assigning shards
+	- Data Node is responsible for holding the data
+	- client/co-ordination Nodes are responsible for load balancing, they handle initial client connections
+
+Nodes inside a cluster communicate with each other via TLS and maintain a cluster state, i.e metadata on which holds what
+
+	- To ensure data is not lost when a server fails, there are replica shards
+	- When one shard is down, replica is then promoted to primary
+	- Never store replica shards in the same hardware. (cluster.routing.allocation.awareness.attributes = rack/zone)
+	- The primary shards receive updates then the replica shards receive theirs
+
+
+Cluster Health
+	- Green => All primary and replica shards are allocated
+	- Yellow => All primary shards are active but one or more replica shards cannot be placed
+	- Red => Atleast one primary shard is unassigned
+
+Some common pitfalls
+	- Over-sharding => Creating too many shards, exhaust CPU and RAM. Create standard size shards approx 20GB - 30GB
+	- Incorrect Mapping => Follow a schema, like ECS or OCSF to minimize field bloat, Define mapping before indexing
+	- Heap Memory Limits => Below 32GB, JVM pointers are 4bytes, above it, it becomes 8bytes. so a 33GB heap can address fewer objects than 30GB. Heap should be 50% of the RAM and in between 26GB and 30GB. If you think you need more, that you actually need one more node
+	- Expensive Queries => Avoid as many wildcard searches as possible
+	- Data Loss Risk => Always implement snapshot lifecycle management
+	- Node roles inside clusters => As the cluster grows seperate the roles of nodes. Master, Data, Client/Co-ordination/Ingest
+	- Data Lifecycle Management => Using Index Lifecycle Management,(It's ISM now, Index State Management) to move data across hot, warm and cold tiers to save cost
+	- Too many Replicas => While replicas are good but if created too much can exhaust the servers resources
+	- Security => TLS on
+	- Monitoring => Setup monitoring for heap usage, garbage collection and cluster health from the start
+
+

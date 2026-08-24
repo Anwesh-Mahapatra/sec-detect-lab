@@ -1,0 +1,53 @@
+Question: (Lab Specific)
+	- A single-node OpenSearch cluster dies under first real indexing load with a bootstrap check failure. Walk me through your triage: what you check first, the root cause pattern, the temporary fix, and the permanent fix.
+
+Answer:
+	- It maybe due to the initial admin password unset via the OPENSEARCH_INITIAL_ADMIN_PASSWORD, set the OPENSEARCH_INITIAL_ADMIN_PASSWORD in the docker compose file to provide Opensearch a password to start with
+	- In the docker compose file, if you have specified plugins.security.disabled: "true", it still does not work because
+		- The demo installer runs earlier in the boot sequence, so ordering is important
+		- 2 documented way to fix this would be DISABLE_SECURITY_PLUGIN=true or DISABLE_INSTALL_DEMO_CONFIG=true
+	- Troubleshooting will involve inspecting the docker compose ps -a exit status code
+		Exited (1) → application/config-level error → logs will name it (this case)
+		Exited (137) → SIGKILL, almost always OOM → check docker inspect for OOMKilled
+		Exited (0) → clean completion → one-shot job doing its job (your minio-init)
+
+Correct Answer:
+	- ps -a exit code → docker logs tail → classify (entrypoint vs. app vs. host check) → docker inspect for OOMKilled → host sysctls
+
+
+
+Question:
+	- Kafka data disk hits 100% at 03:00. What exactly happens to (a) producers, (b) consumer groups, (c) detection coverage — and which two decisions already in your compose file shrink that blast radius?
+
+Answer:
+	- When disk space runs out, kafka stop the writes, blocks all incoming new logs
+	- Errors out with KAFKA_STORAGE_ERROR
+	- Replication factor of 1 means there is no backup copy, log source is dead here
+
+	- Fluent bit now fills it's internal queue and starts buffering data to the disks
+	- Then it pauses reading new log lines
+	- Coz it stops reading, and saves its bookmark(offset), it will push back the data safely when the issue resolves upstream
+
+	- Kafka consumers can still read the existing logs
+	- But they will be unable to save the progress coz the kafka's disk is full, bookmark will not be saved
+	- So there will be data duplication when kafka resumes
+	
+	- Security engine stops seeing the new events
+	- Once recovered, the detections, older detections will fire. If the outage was shorter than Kafka's retention window that was configured
+
+So in my docker compose file, I have a dedicated volume for kafka so that the host filesystem does not fill up. And I can exec in and troubleshoot more.
+Bounded retention:
+	- As long as my incoming log rate is predictable, my disk consumption has a fixed calculated ceiling and prunes itself automatically
+	- But if traffic spikes significantly, my disks can still be full
+
+Prod:
+	- Hard byte caps (retention.bytes) per topic => If the log source goes crazy and generates massive logs, kafka deletes the oldest data, saving the broker from crashing due to disk full
+	- Disk Alerts should be configured
+	- RF of 3 keeps 3 copies of every partition across 3 seperate brokers, so if one fails, another takes over
+
+Question:
+	- Why Kafka at all — Fluent Bit ships straight to OpenSearch; fewer moving parts.
+
+Answer:
+	- To provide buffer, so that if the destination/opensearch is down, logs are stored and replayed so the detection coverage is intact
+	- A direct ship is genuine if the log source is not that critical, or has proven over time that the volume is not that high
