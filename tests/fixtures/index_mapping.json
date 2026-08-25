@@ -1,0 +1,294 @@
+{
+  "logs-k8s-audit": {
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "strings": {
+            "mapping": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "match_mapping_type": "string"
+          }
+        }
+      ],
+      "properties": {
+        "@timestamp": {
+          "type": "date"
+        },
+        "_time": {
+          "type": "double"
+        },
+        "activity_id": {
+          "type": "integer"
+        },
+        "activity_name": {
+          "ignore_above": 4096,
+          "type": "keyword"
+        },
+        "actor": {
+          "properties": {
+            "invoked_by": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "user": {
+              "properties": {
+                "domain": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                },
+                "groups": {
+                  "properties": {
+                    "name": {
+                      "ignore_above": 4096,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "name": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                },
+                "type": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                },
+                "type_id": {
+                  "type": "long"
+                },
+                "uid": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "api": {
+          "properties": {
+            "operation": {
+              "type": "keyword"
+            },
+            "request": {
+              "properties": {
+                "uid": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                }
+              }
+            },
+            "response": {
+              "properties": {
+                "code": {
+                  "type": "integer"
+                },
+                "message": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                }
+              }
+            },
+            "service": {
+              "properties": {
+                "name": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                }
+              }
+            },
+            "version": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            }
+          }
+        },
+        "category_name": {
+          "ignore_above": 4096,
+          "type": "keyword"
+        },
+        "category_uid": {
+          "type": "long"
+        },
+        "class_name": {
+          "ignore_above": 4096,
+          "type": "keyword"
+        },
+        "class_uid": {
+          "type": "long"
+        },
+        "cribl_pipe": {
+          "ignore_above": 4096,
+          "type": "keyword"
+        },
+        "duration": {
+          "type": "long"
+        },
+        "end_time": {
+          "format": "epoch_millis",
+          "type": "date"
+        },
+        "http_request": {
+          "properties": {
+            "url": {
+              "properties": {
+                "url_string": {
+                  "ignore_above": 8192,
+                  "type": "keyword"
+                }
+              }
+            },
+            "user_agent": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            }
+          }
+        },
+        "metadata": {
+          "properties": {
+            "correlation_uid": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "labels": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "log_level": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "log_name": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "original_time": {
+              "type": "keyword"
+            },
+            "product": {
+              "properties": {
+                "feature": {
+                  "properties": {
+                    "name": {
+                      "ignore_above": 4096,
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "name": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                },
+                "vendor_name": {
+                  "ignore_above": 4096,
+                  "type": "keyword"
+                }
+              }
+            },
+            "uid": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "version": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            }
+          }
+        },
+        "resources": {
+          "properties": {
+            "name": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "namespace": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "type": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            }
+          }
+        },
+        "severity": {
+          "ignore_above": 4096,
+          "type": "keyword"
+        },
+        "severity_id": {
+          "type": "integer"
+        },
+        "src_endpoint": {
+          "properties": {
+            "ip": {
+              "type": "ip"
+            },
+            "name": {
+              "type": "keyword"
+            }
+          }
+        },
+        "start_time": {
+          "format": "epoch_millis",
+          "type": "date"
+        },
+        "status": {
+          "ignore_above": 4096,
+          "type": "keyword"
+        },
+        "status_code": {
+          "type": "keyword"
+        },
+        "status_detail": {
+          "ignore_above": 4096,
+          "type": "keyword"
+        },
+        "status_id": {
+          "type": "integer"
+        },
+        "time": {
+          "format": "epoch_millis",
+          "type": "date"
+        },
+        "type_name": {
+          "ignore_above": 4096,
+          "type": "keyword"
+        },
+        "type_uid": {
+          "type": "long"
+        },
+        "unmapped": {
+          "properties": {
+            "authz_decision": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "authz_reason": {
+              "ignore_above": 8192,
+              "type": "keyword"
+            },
+            "impersonated": {
+              "type": "boolean"
+            },
+            "original_user": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "original_user_groups": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "stage": {
+              "ignore_above": 4096,
+              "type": "keyword"
+            },
+            "user_extra": {
+              "dynamic": "false",
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

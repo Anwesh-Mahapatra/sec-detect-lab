@@ -1,0 +1,268 @@
+{
+  "index_patterns": [
+    "logs-k8s-audit*"
+  ],
+  "priority": 500,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "strings": {
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 4096
+            }
+          }
+        }
+      ],
+      "properties": {
+        "_time": {
+          "type": "double"
+        },
+        "@timestamp": {
+          "type": "date"
+        },
+        "time": {
+          "type": "date"
+        },
+        "start_time": {
+          "type": "date"
+        },
+        "end_time": {
+          "type": "date"
+        },
+        "duration": {
+          "type": "long"
+        },
+        "class_uid": {
+          "type": "long"
+        },
+        "class_name": {
+          "type": "keyword"
+        },
+        "category_uid": {
+          "type": "long"
+        },
+        "category_name": {
+          "type": "keyword"
+        },
+        "activity_id": {
+          "type": "integer"
+        },
+        "activity_name": {
+          "type": "keyword"
+        },
+        "type_uid": {
+          "type": "long"
+        },
+        "type_name": {
+          "type": "keyword"
+        },
+        "status_id": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "keyword"
+        },
+        "status_code": {
+          "type": "keyword"
+        },
+        "status_detail": {
+          "type": "keyword"
+        },
+        "severity_id": {
+          "type": "integer"
+        },
+        "severity": {
+          "type": "keyword"
+        },
+        "actor": {
+          "properties": {
+            "invoked_by": {
+              "type": "keyword"
+            },
+            "user": {
+              "properties": {
+                "name": {
+                  "type": "keyword"
+                },
+                "uid": {
+                  "type": "keyword"
+                },
+                "type": {
+                  "type": "keyword"
+                },
+                "type_id": {
+                  "type": "integer"
+                },
+                "domain": {
+                  "type": "keyword"
+                },
+                "groups": {
+                  "properties": {
+                    "name": {
+                      "type": "keyword"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "src_endpoint": {
+          "properties": {
+            "ip": {
+              "type": "ip"
+            },
+            "name": {
+              "type": "keyword"
+            }
+          }
+        },
+        "api": {
+          "properties": {
+            "operation": {
+              "type": "keyword"
+            },
+            "version": {
+              "type": "keyword"
+            },
+            "service": {
+              "properties": {
+                "name": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "request": {
+              "properties": {
+                "uid": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "response": {
+              "properties": {
+                "code": {
+                  "type": "integer"
+                },
+                "message": {
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "resources": {
+          "properties": {
+            "name": {
+              "type": "keyword"
+            },
+            "type": {
+              "type": "keyword"
+            },
+            "namespace": {
+              "type": "keyword"
+            }
+          }
+        },
+        "http_request": {
+          "properties": {
+            "url": {
+              "properties": {
+                "url_string": {
+                  "type": "keyword"
+                }
+              }
+            },
+            "user_agent": {
+              "type": "keyword"
+            }
+          }
+        },
+        "metadata": {
+          "properties": {
+            "version": {
+              "type": "keyword"
+            },
+            "uid": {
+              "type": "keyword"
+            },
+            "correlation_uid": {
+              "type": "keyword"
+            },
+            "original_time": {
+              "type": "keyword"
+            },
+            "log_level": {
+              "type": "keyword"
+            },
+            "log_name": {
+              "type": "keyword"
+            },
+            "labels": {
+              "type": "keyword"
+            },
+            "product": {
+              "properties": {
+                "name": {
+                  "type": "keyword"
+                },
+                "vendor_name": {
+                  "type": "keyword"
+                },
+                "feature": {
+                  "properties": {
+                    "name": {
+                      "type": "keyword"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "unmapped": {
+          "properties": {
+            "stage": {
+              "type": "keyword"
+            },
+            "authz_decision": {
+              "type": "keyword"
+            },
+            "authz_reason": {
+              "type": "keyword"
+            },
+            "impersonated": {
+              "type": "boolean"
+            },
+            "original_user": {
+              "type": "keyword"
+            },
+            "original_user_groups": {
+              "type": "keyword"
+            }
+          }
+        },
+        "_fixture": {
+          "properties": {
+            "rule_id": {
+              "type": "keyword"
+            },
+            "case": {
+              "type": "keyword"
+            },
+            "expect": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}
