@@ -2,10 +2,10 @@ name: detections
 
 on:
   pull_request:
-    paths: [".github/workflows/**", "detections/**", "tests/**", "tools/**"]
+    paths: [".github/workflows/**", "detections/**", "opensearch/**", "tests/**", "tools/**"]
   push:
     branches: [main]
-    paths: [".github/workflows/**", "detections/**", "tests/**", "tools/**"]
+    paths: [".github/workflows/**", "detections/**", "opensearch/**", "tests/**", "tools/**"]
 
 jobs:
   # ---------------------------------------------------------------------------
