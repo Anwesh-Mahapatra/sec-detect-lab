@@ -12,17 +12,10 @@ is the classic silent failure - it passes tests and alerts on nothing.
 
 import argparse
 import json
-import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 from _http import session as requests
-
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from detections import all_rules  # noqa: E402
+from detections import all_rules
 
 
 def main() -> int:

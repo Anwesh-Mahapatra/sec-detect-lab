@@ -15,18 +15,11 @@ agree on the same data.
 """
 
 import argparse
-import sys
-from pathlib import Path
 from typing import Any
 
 from _http import session as requests
-
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from detections import all_rules  # noqa: E402
-from detections.base import Rule  # noqa: E402
+from detections import all_rules
+from detections.base import Rule
 
 
 def fetch(base: str, rule: Rule, window: int, size: int) -> list[dict[str, Any]]:

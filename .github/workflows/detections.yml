@@ -2,10 +2,12 @@ name: detections
 
 on:
   pull_request:
-    paths: [".github/workflows/**", "detections/**", "opensearch/**", "tests/**", "tools/**"]
+    paths: [".github/workflows/**", "detections/**", "opensearch/**", "tests/**", "tools/**",
+            "pyproject.toml", "uv.lock", ".python-version"]
   push:
     branches: [main]
-    paths: [".github/workflows/**", "detections/**", "opensearch/**", "tests/**", "tools/**"]
+    paths: [".github/workflows/**", "detections/**", "opensearch/**", "tests/**", "tools/**",
+            "pyproject.toml", "uv.lock", ".python-version"]
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -15,12 +17,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-      - run: pip install -r requirements.txt
+          enable-cache: true
+      # --locked, not --frozen. Both refuse to re-resolve, but --frozen installs
+      # the lockfile without ever comparing it to pyproject.toml, so a stale
+      # lock exits 0 and CI silently tests the wrong dependency set. --locked
+      # compares them and fails: "lockfile needs to be updated". A lockfile CI
+      # is allowed to ignore is not a lockfile.
+      - run: uv sync --locked
       - name: Unit tests, metadata and schema contract
-        run: python -m pytest tests/ -v
+        run: uv run python -m pytest tests/ -v
 
   # ---------------------------------------------------------------------------
   # Gate 2 - the query really is valid against a real OpenSearch, not just
@@ -44,10 +51,15 @@ jobs:
           --health-interval 10s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-      - run: pip install -r requirements.txt
+          enable-cache: true
+      # --locked, not --frozen. Both refuse to re-resolve, but --frozen installs
+      # the lockfile without ever comparing it to pyproject.toml, so a stale
+      # lock exits 0 and CI silently tests the wrong dependency set. --locked
+      # compares them and fails: "lockfile needs to be updated". A lockfile CI
+      # is allowed to ignore is not a lockfile.
+      - run: uv sync --locked
 
       - name: Create index with the production mapping
         run: |
@@ -57,13 +69,13 @@ jobs:
           curl -sf -X PUT localhost:9200/logs-k8s-audit
 
       - name: Load every fixture as a real document
-        run: python tools/load_fixtures.py --url http://localhost:9200
+        run: uv run python tools/load_fixtures.py --url http://localhost:9200
 
       - name: Every rule's query must execute and find its true positives
-        run: python tools/validate_queries.py --url http://localhost:9200
+        run: uv run python tools/validate_queries.py --url http://localhost:9200
 
       - name: Monitors must render and deploy cleanly
-        run: python tools/deploy.py --url http://localhost:9200
+        run: uv run python tools/deploy.py --url http://localhost:9200
 
   # ---------------------------------------------------------------------------
   # Gate 3 - deploy rehearsal.
@@ -119,10 +131,15 @@ jobs:
           --health-interval 10s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-      - run: pip install -r requirements.txt
+          enable-cache: true
+      # --locked, not --frozen. Both refuse to re-resolve, but --frozen installs
+      # the lockfile without ever comparing it to pyproject.toml, so a stale
+      # lock exits 0 and CI silently tests the wrong dependency set. --locked
+      # compares them and fails: "lockfile needs to be updated". A lockfile CI
+      # is allowed to ignore is not a lockfile.
+      - run: uv sync --locked
 
       # A monitor names its index in `inputs.search.indices`. Seed it so the
       # rehearsal exercises the same shape as production rather than a cluster
@@ -137,7 +154,7 @@ jobs:
       - name: Deploy - first run, from an empty cluster
         run: |
           set -o pipefail
-          python tools/deploy.py --url http://localhost:9200 | tee /tmp/deploy-1.log
+          uv run python tools/deploy.py --url http://localhost:9200 | tee /tmp/deploy-1.log
           grep -qE '^created=[1-9]' /tmp/deploy-1.log \
             || { echo "::error::first deploy created no monitors at all"; exit 1; }
 
@@ -153,7 +170,7 @@ jobs:
       - name: Deploy - second run must create nothing
         run: |
           set -o pipefail
-          python tools/deploy.py --url http://localhost:9200 | tee /tmp/deploy-2.log
+          uv run python tools/deploy.py --url http://localhost:9200 | tee /tmp/deploy-2.log
           grep -qE '^created=0( |$)' /tmp/deploy-2.log || {
             echo "::error::second deploy created monitors - deploy.py is not idempotent, so every merge to main would duplicate them"
             exit 1
@@ -161,7 +178,7 @@ jobs:
 
       - name: Assert the cluster holds exactly the intended monitors
         run: |
-          python - <<'PY'
+          uv run python - <<'PY'
           import sys
 
           import requests

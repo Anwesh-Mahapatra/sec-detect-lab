@@ -20,6 +20,12 @@ cribl.secret
 k3s.yaml
 kubeconfig
 
+# Python toolchain — uv owns the venv; the lockfile is the source of truth
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
 # Editor / OS noise
 .DS_Store
 *.swp

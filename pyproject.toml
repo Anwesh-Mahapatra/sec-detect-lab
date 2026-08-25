@@ -1,0 +1,42 @@
+[project]
+name = "sec-detect-lab"
+version = "0.1.0"
+description = "Detection-engineering lab: k3s API audit logs normalised to OCSF in OpenSearch, with detection rules as code."
+readme = "README.md"
+
+# DELIBERATE UPPER BOUND — skew prevention, not a compatibility limit.
+#
+# Nothing here is known to break on 3.13+. The bound exists because this repo's
+# whole thesis is silent failure, and "works locally, behaves differently in CI"
+# is that failure in its purest form: a detection pipeline that disagrees with
+# itself across two machines. See FINDINGS D1 — a gzip hang reproducible on one
+# laptop's system Python and invisible to CI on 3.12.
+#
+# Pinning to a single minor version means uv.lock is only ever solved for one
+# interpreter, so local and CI cannot drift apart by construction.
+#
+# Raising it is a one-line change: widen this bound, then `uv lock` and commit
+# the result. Keep it to a single minor version unless you want the skew back.
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    "requests>=2.31.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Flat-layout repo: most top-level directories (tools, tests, docs, cribl, k3s,
+# opensearch, fluent-bit) are not Python packages. Name the one that is,
+# explicitly, so no auto-discovery has to guess.
+#
+# Installing `detections` is what lets tools/*.py and tests/ import it without
+# the sys.path.insert() preamble they used to carry.
+[tool.hatch.build.targets.wheel]
+packages = ["detections"]

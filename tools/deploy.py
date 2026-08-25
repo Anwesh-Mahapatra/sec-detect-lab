@@ -16,17 +16,11 @@ than no monitor, because it looks like coverage.
 
 import argparse
 import json
-import sys
 from typing import Any
 
 from _http import session as requests
-
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
-
-from detections import all_rules  # noqa: E402
-from detections.base import Rule  # noqa: E402
+from detections import all_rules
+from detections.base import Rule
 
 SEVERITY_TO_OS = {"CRITICAL": "1", "HIGH": "2", "MEDIUM": "3", "LOW": "4", "INFO": "5"}
 MONITOR_API = "/_plugins/_alerting/monitors"

@@ -369,6 +369,81 @@ Real, but nothing here makes an attack invisible or an answer wrong today.
 
 ---
 
+## Class D — toolchain reproducibility
+
+The pipeline is not the only thing that can fail silently. So can the tooling
+that queries it: a rule that behaves differently on two machines is the same
+class of defect as a mapping that indexes the wrong type.
+
+### D1. `_search` returns chunked gzip, and one host's urllib3 hangs on it forever
+
+**Where:** `tools/_http.py` — every tool routes through a session that sets
+`Accept-Encoding: identity`.
+
+OpenSearch compresses `_search` responses and streams them without a length,
+which is the specific shape that hung. Other endpoints do not, which is why the
+bug looked intermittent:
+
+```
+logs-k8s-audit/_search?size=200  →  content-encoding: gzip   transfer-encoding: chunked   ← no Content-Length
+_cluster/state                   →  content-encoding: gzip   content-length: 10469
+_nodes/stats                     →  content-encoding: gzip   content-length: 4348
+logs-k8s-audit/_mapping          →  content-encoding: gzip   content-length: 703
+```
+
+`_search` is the hot path — `run_detections.py`, `validate_queries.py` and
+`deploy.py` all call it — so the affected shape is the one the detections
+depend on. On the affected machine the read never returned; identity encoding
+returned in milliseconds.
+
+**It did not reproduce on any PyPI build.** Measured against this cluster,
+2,117 live documents, `size=200` and `size=2000` (multi-MB):
+
+| Python | urllib3 | `identity` | `gzip` (chunked) |
+|---|---|---|---|
+| 3.12 | 2.7.0 | 0.039 s | 0.048 s |
+| 3.14 | 2.0.7 | 0.032 s | 0.033 s |
+| 3.13 | 2.0.7 | — | 0.238 s (2000 hits) |
+| 3.14 | 2.0.7 | — | 0.239 s (2000 hits) |
+
+So the trigger is **not** "Python 3.14" and **not** "urllib3 2.0.7" — both are
+fine from PyPI. It is that host's *packaging* of urllib3 (Debian's patched
+build), which was never isolated further.
+
+**Why the workaround is retained even though the bug will not occur.** The
+project now pins Python 3.12 and resolves urllib3 from PyPI through `uv.lock`,
+so the affected interpreter and the affected package build are both excluded by
+construction. That is the real fix. The header is kept anyway for two reasons:
+non-reproduction is not proof of absence, since the root cause was never
+identified — only the conditions under which it failed to appear; and the
+tools remain runnable as `python3 tools/run_detections.py` outside uv, which is
+the exact invocation that hit the bug. The cost of being wrong is a detection
+run that hangs forever with no error. The cost of the workaround is one request
+header on responses of a few hundred KB.
+
+**The skew itself was the finding.** CI ran 3.12 and never saw this; one laptop
+ran 3.14 and saw it every time. A detection pipeline that disagrees with itself
+across two machines is indistinguishable from one that works, right up until it
+matters. `.python-version` + `uv.lock` + `uv sync --locked` in CI remove the
+class, not just this instance.
+
+**Check:** with a live cluster, compare the two encodings against `_search` —
+a hang under `gzip` that clears under `identity` is this bug returning:
+
+```bash
+uv run python - <<'PY'
+import time, requests
+for enc in ("identity", "gzip"):
+    s = requests.Session(); s.headers.update({"Accept-Encoding": enc})
+    t = time.time()
+    r = s.post("http://localhost:9200/logs-k8s-audit/_search",
+               json={"size": 200, "query": {"match_all": {}}}, timeout=20)
+    print(enc, len(r.json()["hits"]["hits"]), f"{time.time()-t:.3f}s")
+PY
+```
+
+---
+
 ## Hypotheses killed — verified fine
 
 Recorded so they do not get re-investigated.

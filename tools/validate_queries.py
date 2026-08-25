@@ -15,17 +15,10 @@ Run after load_fixtures.py. For each rule:
 """
 
 import argparse
-import sys
-from pathlib import Path
 
 from _http import session as requests
-
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from detections import all_rules  # noqa: E402
-from detections.base import Rule  # noqa: E402
+from detections import all_rules
+from detections.base import Rule
 
 
 def ids_matching(base: str, rule: Rule) -> set[str]:

@@ -71,20 +71,23 @@ rather than letting everyone assume it was working all along.
 1. Copy `detections/t1552_sa_denied_secrets.py`
 2. Change the id, metadata and `rule()` logic
 3. Write fixtures **before** the logic — including the one that should not fire
-4. `python3 -m pytest tests/ -v`
-5. `python3 tools/run_detections.py --all --window 1440` against live data
+4. `uv run pytest tests/ -v`
+5. `uv run python tools/run_detections.py --all --window 1440` against live data
 6. Open a PR
 
 ## Commands
 
+Dependencies and the interpreter are pinned by `pyproject.toml` + `uv.lock`. `uv run` builds the environment on first use, so there is no activate step and no dependence on the host's Python.
+
 ```bash
-pytest tests/ -v                                  # gate 1, no cluster needed
-python3 tools/snapshot_mapping.py                 # refresh the schema contract
-python3 tools/load_fixtures.py                    # fixtures into OpenSearch
-python3 tools/validate_queries.py                 # query vs logic agreement
-python3 tools/run_detections.py --all --window 60 # hunt over live data
-python3 tools/deploy.py --dry-run                 # inspect rendered monitors
-python3 tools/deploy.py                           # sync to OpenSearch
+uv sync                                                  # one-time: create .venv from the lockfile
+uv run pytest tests/ -v                                  # gate 1, no cluster needed
+uv run python tools/snapshot_mapping.py                  # refresh the schema contract
+uv run python tools/load_fixtures.py                     # fixtures into OpenSearch
+uv run python tools/validate_queries.py                  # query vs logic agreement
+uv run python tools/run_detections.py --all --window 60  # hunt over live data
+uv run python tools/deploy.py --dry-run                  # inspect rendered monitors
+uv run python tools/deploy.py                            # sync to OpenSearch
 ```
 
 ## Current rules
