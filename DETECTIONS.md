@@ -161,6 +161,76 @@ separates the two:
 Without the state file both cases print the same thing, and half of all canary
 alerts send you to the wrong system. Full triage: `docs/runbooks/pipeline_canary.md`.
 
+### The evidence: identical observable, opposite diagnosis
+
+Captured against the running stack. Both runs print the **same** heartbeat line
+and exit the same way. Only the `cause` line differs, and it is the difference
+between restarting a cron and paging whoever owns the pipeline.
+
+**Generator stopped** — nothing was beating, transport never tested:
+
+```
+$ uv run python tools/run_detections.py --all --window 1
+
+PIPELINE_CANARY  HIGH  heartbeats=0 in 1m  (need >=1)  [FIRING]
+    ALERT  Detection pipeline heartbeat missing
+    cause  GENERATOR: generator last beat 2.2m ago, outside the 1m window - the
+           cron/timer running tools/canary.py is stopped. The transport may be
+           perfectly healthy; nothing is feeding it.
+$ echo $?
+3
+```
+
+**Transport stopped** — `docker compose stop fluent-bit`, then beat normally:
+
+```
+$ uv run python tools/canary.py
+heartbeat detection-canary/canary-1787700538  state=/home/anwesh/.cache/...
+$ echo $?
+0                                   <- the generator is FINE. It wrote the event.
+
+$ uv run python tools/run_detections.py --all --window 1
+
+PIPELINE_CANARY  HIGH  heartbeats=0 in 1m  (need >=1)  [FIRING]
+    ALERT  Detection pipeline heartbeat missing
+    cause  TRANSPORT: generator beat 0.3m ago but nothing reached OpenSearch -
+           the audit transport is broken between the apiserver and the index.
+           Check Fluent Bit, Kafka lag, then Cribl.
+$ echo $?
+3
+```
+
+Note the two heartbeat lines are byte-identical: `heartbeats=0 in 1m (need >=1)
+[FIRING]`. The index cannot tell these apart. The state file can, because
+`canary.py` touches it *before* the pipeline is involved — 2.2m stale in the
+first case, 0.3m fresh in the second.
+
+**Corroboration**, following the runbook's own triage order. Kafka offsets
+frozen across five seconds means nothing is being produced, so the break is at
+or before Fluent Bit — exactly where the `TRANSPORT` diagnosis pointed:
+
+```
+$ docker exec kafka kafka-get-offsets --bootstrap-server kafka:29092 --topic logs.k8s-audit
+logs.k8s-audit:0:3048
+logs.k8s-audit:1:35878
+logs.k8s-audit:2:2854
+...5s...
+logs.k8s-audit:0:3048            <- identical: the producer is gone
+logs.k8s-audit:1:35878
+logs.k8s-audit:2:2854
+
+$ curl -s localhost:9200/logs-k8s-audit/_count -d '{"query":{"term":{"resources.name":"canary-1787700538"}}}'
+  canary-1787700538 docs: 0      <- the beat that was written never arrived
+```
+
+**Recovery is automatic.** On `docker compose start fluent-bit`, the position
+DB replayed the gap and the *missed* beat arrived — both its create and delete:
+
+```
+t+10s  missed-beat canary-1787700538 docs=0
+t+20s  missed-beat canary-1787700538 docs=2     <- gap recovered
+```
+
 ### Do not run `load_fixtures.py` against a live index
 
 The canary's own fixtures are valid-looking heartbeats. Loaded into the index
@@ -175,6 +245,9 @@ curl -s -X POST 'localhost:9200/logs-k8s-audit/_delete_by_query?refresh=true' \
   -H 'Content-Type: application/json' \
   -d '{"query":{"exists":{"field":"_fixture"}}}'
 ```
+
+Recorded as **FINDINGS D2**, including why presence and absence rules fail in
+opposite directions from the same cause.
 
 ### Why the canary is a configmap write, not something harder to silence
 

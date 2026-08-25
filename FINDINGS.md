@@ -369,11 +369,12 @@ Real, but nothing here makes an attack invisible or an answer wrong today.
 
 ---
 
-## Class D — toolchain reproducibility
+## Class D — the tooling itself
 
 The pipeline is not the only thing that can fail silently. So can the tooling
-that queries it: a rule that behaves differently on two machines is the same
-class of defect as a mapping that indexes the wrong type.
+that queries it, tests it, and vouches for it: a rule that behaves differently
+on two machines is the same class of defect as a mapping that indexes the wrong
+type, and a control defeated by its own test harness is worse than both.
 
 ### D1. `_search` returns chunked gzip, and one host's urllib3 hangs on it forever
 
@@ -441,6 +442,62 @@ for enc in ("identity", "gzip"):
     print(enc, len(r.json()["hits"]["hits"]), f"{time.time()-t:.3f}s")
 PY
 ```
+
+### D2. Test fixtures loaded into a live index register as genuine heartbeats
+
+**Where:** `tools/load_fixtures.py` writes every rule's fixtures into
+`rule.index`, which defaults to the production index `logs-k8s-audit`.
+`PIPELINE_CANARY`'s true-positive fixtures are, by construction, valid-looking
+heartbeats.
+
+The canary exists to prove the pipeline is delivering. Loading its own fixtures
+into the index it watches satisfies it with documents that never traversed the
+pipeline at all. **The control that proves the pipeline is alive is defeated by
+the tooling that tests it** — and it fails green, so nothing surfaces.
+
+Observed while validating the canary against the running stack: of 20 fixture
+documents loaded, **5 landed in the `detection-canary` namespace** and counted
+as heartbeats. The rule reported `OK` on a pipeline that was, at that moment,
+not being measured at all.
+
+```
+loaded 20 fixture documents into logs-k8s-audit
+  canary docs that are FIXTURES: 5      <- indistinguishable from real beats
+deleted fixture docs: 20 | failures: 0
+```
+
+**Presence and absence rules fail in opposite directions from the same cause.**
+This is the part worth internalising, because it inverts the usual intuition
+about which failure you will notice:
+
+| Cause | Presence rule (every attack rule) | Absence rule (the canary) |
+|---|---|---|
+| Fixtures loaded into the live index | fires on fixture true-positives — a **loud** false alert you investigate and dismiss | goes quiet — a **silent** false all-clear you never look at |
+| Query references a field the pipeline stopped producing | retrieves nothing, never fires — silent false negative | retrieves nothing, fires **forever** — loud false positive |
+
+So the same broken field that makes a detection quietly stop working makes a
+canary scream, and the same pollution that makes a detection scream makes a
+canary quietly lie. Neither rule type is safe on its own; they fail in
+complementary directions, which is the argument for running both.
+
+A practical consequence: `tools/validate_queries.py` matters *more* for an
+absence rule than a presence one. For a presence rule a broken query is a
+silent gap; for an absence rule it is a pager that never stops.
+
+**Check:** fixtures are tagged, so pollution is detectable and reversible.
+
+```bash
+curl -s localhost:9200/logs-k8s-audit/_count -H 'Content-Type: application/json' \
+  -d '{"query":{"exists":{"field":"_fixture"}}}'          # pass = 0
+
+curl -s -X POST 'localhost:9200/logs-k8s-audit/_delete_by_query?refresh=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":{"exists":{"field":"_fixture"}}}'          # remove them
+```
+
+`load_fixtures.py` is meant for the throwaway cluster CI builds, where the index
+holds nothing else. Pointing it at a live index is the mistake; the tagging is
+what makes that mistake recoverable rather than permanent.
 
 ---
 

@@ -28,7 +28,7 @@ Kafka sits between collection and processing so that an OpenSearch outage buffer
 | `k3s/config.yaml` | k3s `kube-apiserver-arg` audit flags |
 | `cribl/` | Exported Cribl config — inputs, outputs, routes, both pipelines |
 | `opensearch/` | Index template as it currently exists |
-| `FINDINGS.md` | Gap audit: 33 findings graded by impact, verified against the running stack |
+| `FINDINGS.md` | Gap audit: 34 findings graded by impact, verified against the running stack |
 | `test.sh` | Attack-path drill — impersonation, exec, secret reads, RBAC writes, denial |
 | `sample.json` | One representative k8s audit event |
 | `notes*.txt` | Phase notes — OpenSearch internals, Fluent Bit/Kafka durability, PII strategy |
