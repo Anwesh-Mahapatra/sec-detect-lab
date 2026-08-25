@@ -2,10 +2,10 @@ name: detections
 
 on:
   pull_request:
-    paths: ["detections/**", "tests/**", "tools/**"]
+    paths: [".github/workflows/**", "detections/**", "tests/**", "tools/**"]
   push:
     branches: [main]
-    paths: ["detections/**", "tests/**", "tools/**"]
+    paths: [".github/workflows/**", "detections/**", "tests/**", "tools/**"]
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -66,20 +66,146 @@ jobs:
         run: python tools/deploy.py --url http://localhost:9200
 
   # ---------------------------------------------------------------------------
-  # Gate 3 - deploy. Only on main, only after both gates pass.
+  # Gate 3 - deploy rehearsal.
+  #
+  # This is deliberately NOT a real deploy, and that is the point.
+  #
+  # Production OpenSearch lives on a private host with no route from a
+  # GitHub-hosted runner, so the old `deploy` job could never have worked from
+  # here. It read secrets.OPENSEARCH_URL, which was never set, so `--url`
+  # expanded to the empty string and every run on main died inside requests:
+  #
+  #   requests.exceptions.MissingSchema:
+  #     Invalid URL '/_plugins/_alerting/monitors/_search'
+  #
+  # A red X meaning "no credentials configured" is indistinguishable at a glance
+  # from a red X meaning "a detection is broken". That ambiguity is the failure
+  # mode worth deleting - a pipeline nobody trusts is a pipeline nobody reads.
+  #
+  # So rather than fake a deploy, this job rehearses one against a throwaway
+  # cluster and asserts the three properties that make the real deploy safe to
+  # run unattended:
+  #
+  #   1. deploy.py runs clean end to end against a real Alerting plugin, not a
+  #      mock - the painless condition and monitor schema are really accepted.
+  #   2. Running it twice creates nothing the second time. deploy.py claims to
+  #      be idempotent; this proves it, so a merge to main cannot silently
+  #      double every monitor in the cluster.
+  #   3. Exactly the intended monitors exist afterwards. In particular
+  #      T1078_IMPERSONATED_READ is blocked_by A3-partial and must never reach
+  #      a cluster: a monitor that structurally cannot fire still shows up on a
+  #      coverage dashboard, which is worse than having no monitor at all.
+  #
+  # Pointing this at the live cluster is one secret away. Set OPENSEARCH_URL,
+  # delete the `services:` block and the index-seeding step, and swap
+  # http://localhost:9200 for "$OPENSEARCH_URL" in the two deploy steps. Every
+  # assertion below stays exactly as written - they are cluster-agnostic.
   # ---------------------------------------------------------------------------
-  deploy:
+  deploy-rehearsal:
     runs-on: ubuntu-latest
     needs: [test, validate-against-opensearch]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: production
+    services:
+      opensearch:
+        image: opensearchproject/opensearch:2.19.0
+        env:
+          discovery.type: single-node
+          DISABLE_SECURITY_PLUGIN: "true"
+          DISABLE_INSTALL_DEMO_CONFIG: "true"
+          OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+        ports: ["9200:9200"]
+        options: >-
+          --health-cmd "curl -sf http://localhost:9200/_cluster/health"
+          --health-interval 10s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Sync monitors to OpenSearch
-        env:
-          OPENSEARCH_URL: ${{ secrets.OPENSEARCH_URL }}
-        run: python tools/deploy.py --url "$OPENSEARCH_URL"
+
+      # A monitor names its index in `inputs.search.indices`. Seed it so the
+      # rehearsal exercises the same shape as production rather than a cluster
+      # where every monitor points at an index that does not exist.
+      - name: Seed the target index with the production mapping
+        run: |
+          curl -sf -X PUT localhost:9200/_index_template/logs-k8s-audit \
+            -H 'Content-Type: application/json' \
+            -d @opensearch/index-template.json
+          curl -sf -X PUT localhost:9200/logs-k8s-audit
+
+      - name: Deploy - first run, from an empty cluster
+        run: |
+          set -o pipefail
+          python tools/deploy.py --url http://localhost:9200 | tee /tmp/deploy-1.log
+          grep -qE '^created=[1-9]' /tmp/deploy-1.log \
+            || { echo "::error::first deploy created no monitors at all"; exit 1; }
+
+      # deploy.py finds existing monitors by searching the alerting config
+      # index, which is only near-real-time. Without a refresh the second run
+      # can outrun the index and re-create what it just made - a false
+      # idempotency failure below rather than a real one.
+      - name: Let the alerting config index catch up
+        run: |
+          curl -sf -X POST 'localhost:9200/.opendistro-alerting-config/_refresh' || true
+          sleep 5
+
+      - name: Deploy - second run must create nothing
+        run: |
+          set -o pipefail
+          python tools/deploy.py --url http://localhost:9200 | tee /tmp/deploy-2.log
+          grep -qE '^created=0( |$)' /tmp/deploy-2.log || {
+            echo "::error::second deploy created monitors - deploy.py is not idempotent, so every merge to main would duplicate them"
+            exit 1
+          }
+
+      - name: Assert the cluster holds exactly the intended monitors
+        run: |
+          python - <<'PY'
+          import sys
+
+          import requests
+
+          # Same identity-encoding workaround as tools/_http.py.
+          s = requests.Session()
+          s.headers.update({"Accept-Encoding": "identity"})
+
+          r = s.post(
+              "http://localhost:9200/_plugins/_alerting/monitors/_search",
+              json={"size": 100, "query": {"match_all": {}}},
+              timeout=60,
+          )
+          r.raise_for_status()
+          names = sorted(
+              h["_source"]["monitor"]["name"] for h in r.json()["hits"]["hits"]
+          )
+
+          print(f"monitors in cluster ({len(names)}):")
+          for n in names:
+              print(f"  {n}")
+
+          failures = []
+
+          if "T1552_SA_DENIED_SECRETS" not in names:
+              failures.append(
+                  "T1552_SA_DENIED_SECRETS is absent - it is mode=monitor with no "
+                  "blocked_by, so deploy.py should have created it"
+              )
+
+          if names.count("T1552_SA_DENIED_SECRETS") > 1:
+              failures.append(
+                  "T1552_SA_DENIED_SECRETS exists more than once - duplicate monitors"
+              )
+
+          if "T1078_IMPERSONATED_READ" in names:
+              failures.append(
+                  "T1078_IMPERSONATED_READ was deployed - it is blocked_by "
+                  "A3-partial and must never reach a cluster, because a monitor "
+                  "that cannot fire still reads as coverage"
+              )
+
+          for f in failures:
+              print(f"::error::{f}")
+
+          sys.exit(1 if failures else 0)
+          PY
