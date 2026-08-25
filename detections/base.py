@@ -14,6 +14,11 @@ Two extra pieces exist because OpenSearch is not a streaming engine:
            OpenSearch Alerting monitor), "runner" if `rule()` adds logic the
            query cannot express (runs on a schedule instead).
 
+`fires_on` decides how the matched-event count becomes a verdict. Almost every
+rule is "presence" - something bad happened. A canary is "absence" - something
+expected did NOT happen, which is how a dead pipeline is told apart from a quiet
+one. rule() is unchanged either way; only the aggregation flips.
+
 `blocked_by` is the honest part: a rule that is correct but structurally cannot
 fire because the pipeline never delivers the event. CI asserts it stays broken
 until the referenced FINDINGS.md gap is fixed.
@@ -48,8 +53,26 @@ class Rule:
     index: str = "logs-k8s-audit"
     mode: str = "monitor"            # "monitor" | "runner"
     window_minutes: int = 5
-    threshold: int = 1               # alert when hits >= threshold
+    threshold: int = 1               # count at which the trigger condition is met
     query: dict[str, Any] = {}       # OpenSearch Query DSL prefilter
+
+    # How the matched-event count becomes a verdict:
+    #   "presence" - alert when count >= threshold. Every attack rule.
+    #   "absence"  - alert when count <  threshold. Heartbeats and canaries,
+    #                which alert because the expected event did NOT arrive.
+    #
+    # This names a comparison that was always here and always hardcoded. It
+    # changes aggregation only - rule() keeps its exact signature and meaning:
+    # "does this event count toward this rule's trigger condition?" For an
+    # attack rule that reads as "is this bad?"; for a canary, "is this the
+    # heartbeat I expect?". Both are ordinary per-event predicates, so both
+    # stay unit-testable against real events with no OpenSearch running.
+    #
+    # An absence rule cannot be deployed as a native OpenSearch monitor:
+    # deploy.py renders `hits.total.value >= threshold`, which is inverted for
+    # absence and would fire whenever the pipeline is healthy. deploy.py
+    # refuses them explicitly rather than relying on mode="runner".
+    fires_on: str = "presence"       # "presence" | "absence"
 
     # --- validation gap -----------------------------------------------------
     blocked_by: str | None = None    # FINDINGS.md id, e.g. "A3"
@@ -64,7 +87,14 @@ class Rule:
         raise NotImplementedError
 
     def alert_title(self, event: dict[str, Any]) -> str:
-        """Alert headline. Override to include the actor, resource, etc."""
+        """
+        Alert headline. Override to include the actor, resource, etc.
+
+        For fires_on="absence" rules there is no event when the rule fires, so
+        the alert itself uses `title`. This method then describes a *matched*
+        event instead - the runner uses it for the "last seen" line while the
+        heartbeat is healthy.
+        """
         return self.title
 
     def dedup_key(self, event: dict[str, Any]) -> str:

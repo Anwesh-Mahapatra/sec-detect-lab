@@ -79,6 +79,14 @@ def find_existing(base: str, name: str) -> str | None:
 def deployable(rule: Rule) -> tuple[bool, str]:
     if rule.blocked_by:
         return False, f"blocked by FINDINGS {rule.blocked_by}"
+    # build_monitor() renders `hits.total.value >= threshold`, which is exactly
+    # backwards for an absence rule: it would fire whenever the heartbeat IS
+    # arriving and stay silent when the pipeline dies. A monitor that cannot
+    # fire when it matters still reads as coverage on a dashboard, which is the
+    # failure this repo exists to document. Checked here rather than trusting
+    # mode="runner", so the invariant survives someone flipping that field.
+    if rule.fires_on == "absence":
+        return False, "absence rule - a presence monitor would be inverted"
     if rule.mode != "monitor":
         return False, "runner mode - executes via run_detections.py"
     return True, ""
