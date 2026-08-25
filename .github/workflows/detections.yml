@@ -169,16 +169,24 @@ jobs:
           # Same identity-encoding workaround as tools/_http.py.
           s = requests.Session()
           s.headers.update({"Accept-Encoding": "identity"})
-
+          # Filter on monitor.name because .opendistro-alerting-config also holds a
+          # per-job "-metadata" doc alongside each monitor. Queries address the stored
+          # path (monitor.name), but the API unwraps the monitor on the way out, so the
+          # response _source is the monitor body itself - hence the fallback below.
           r = s.post(
               "http://localhost:9200/_plugins/_alerting/monitors/_search",
-              json={"size": 100, "query": {"match_all": {}}},
+              json={"size": 100, "query": {"exists": {"field": "monitor.name"}}},
               timeout=60,
           )
           r.raise_for_status()
-          names = sorted(
-              h["_source"]["monitor"]["name"] for h in r.json()["hits"]["hits"]
-          )
+
+          names = []
+          for hit in r.json()["hits"]["hits"]:
+              src = hit["_source"]
+              name = src.get("name") or src.get("monitor", {}).get("name")
+              if name:
+                  names.append(name)
+          names.sort()
 
           print(f"monitors in cluster ({len(names)}):")
           for n in names:
