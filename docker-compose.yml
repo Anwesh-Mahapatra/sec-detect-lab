@@ -162,3 +162,26 @@ services:
         condition: service_healthy
       opensearch:
         condition: service_healthy
+
+  # =========================================================================
+  # OPENSEARCH DASHBOARDS — query/visualisation UI for the hot tier
+  # =========================================================================
+  dashboards:
+    image: opensearchproject/opensearch-dashboards:2.19.0
+    container_name: dashboards
+    networks: [secnet]
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'   # service-name DNS on secnet; never the host IP
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"       # LAB ONLY — must mirror DISABLE_SECURITY_PLUGIN on opensearch
+      SERVER_HOST: "0.0.0.0"                           # bind all container ifaces, else the published port is dead
+    ports:
+      - "0.0.0.0:5601:5601"   # explicit LAN exposure — http://192.168.1.176:5601
+    depends_on:
+      opensearch:
+        condition: service_healthy   # OSD hard-fails its startup poll if the cluster isn't up yet
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status | grep -q '\"state\":\"green\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
