@@ -5,7 +5,7 @@ outputs:
     streamtags: []
     loadBalanced: true
     concurrency: 5
-    maxPayloadSizeKB: 4096
+    maxPayloadSizeKB: 10240
     maxPayloadEvents: 0
     compress: true
     rejectUnauthorized: false

@@ -43,70 +43,84 @@
           "type": "long"
         },
         "class_name": {
-          "type": "keyword"
+          "type": "keyword",
+          "ignore_above": 32766
         },
         "category_uid": {
           "type": "long"
         },
         "category_name": {
-          "type": "keyword"
+          "type": "keyword",
+          "ignore_above": 32766
         },
         "activity_id": {
           "type": "integer"
         },
         "activity_name": {
-          "type": "keyword"
+          "type": "keyword",
+          "ignore_above": 32766
         },
         "type_uid": {
           "type": "long"
         },
         "type_name": {
-          "type": "keyword"
+          "type": "keyword",
+          "ignore_above": 32766
         },
         "status_id": {
           "type": "integer"
         },
         "status": {
-          "type": "keyword"
+          "type": "keyword",
+          "ignore_above": 32766
         },
         "status_code": {
-          "type": "keyword"
+          "type": "keyword",
+          "ignore_above": 32766
         },
         "status_detail": {
-          "type": "keyword"
+          "type": "keyword",
+          "ignore_above": 32766
         },
         "severity_id": {
           "type": "integer"
         },
         "severity": {
-          "type": "keyword"
+          "type": "keyword",
+          "ignore_above": 32766
         },
         "actor": {
           "properties": {
             "invoked_by": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "user": {
               "properties": {
                 "name": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 },
                 "uid": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 },
                 "type": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 },
                 "type_id": {
                   "type": "integer"
                 },
                 "domain": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 },
                 "groups": {
                   "properties": {
                     "name": {
-                      "type": "keyword"
+                      "type": "keyword",
+                      "ignore_above": 32766
                     }
                   }
                 }
@@ -120,29 +134,34 @@
               "type": "ip"
             },
             "name": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             }
           }
         },
         "api": {
           "properties": {
             "operation": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "version": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "service": {
               "properties": {
                 "name": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 }
               }
             },
             "request": {
               "properties": {
                 "uid": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 }
               }
             },
@@ -152,7 +171,8 @@
                   "type": "integer"
                 },
                 "message": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 }
               }
             }
@@ -161,13 +181,16 @@
         "resources": {
           "properties": {
             "name": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "type": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "namespace": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             }
           }
         },
@@ -176,50 +199,62 @@
             "url": {
               "properties": {
                 "url_string": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 }
               }
             },
             "user_agent": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             }
           }
         },
         "metadata": {
           "properties": {
             "version": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "uid": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "correlation_uid": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "original_time": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "log_level": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "log_name": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "labels": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "product": {
               "properties": {
                 "name": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 },
                 "vendor_name": {
-                  "type": "keyword"
+                  "type": "keyword",
+                  "ignore_above": 32766
                 },
                 "feature": {
                   "properties": {
                     "name": {
-                      "type": "keyword"
+                      "type": "keyword",
+                      "ignore_above": 32766
                     }
                   }
                 }
@@ -230,32 +265,48 @@
         "unmapped": {
           "properties": {
             "stage": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "authz_decision": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "authz_reason": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "impersonated": {
               "type": "boolean"
             },
             "original_user": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "original_user_groups": {
+              "type": "keyword",
+              "ignore_above": 32766
+            },
+            "oversize": {
+              "type": "boolean"
+            },
+            "oversize_fields": {
               "type": "keyword"
+            },
+            "oversize_max_len": {
+              "type": "long"
             }
           }
         },
         "_fixture": {
           "properties": {
             "rule_id": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "case": {
-              "type": "keyword"
+              "type": "keyword",
+              "ignore_above": 32766
             },
             "expect": {
               "type": "boolean"

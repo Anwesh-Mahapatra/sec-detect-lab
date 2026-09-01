@@ -125,6 +125,35 @@ functions:
           out.resources = [r];
         }
 
+        // ignore_above:4096 on the dynamic string template skips INDEXING without
+        // failing the document: the value stays in _source while term and exists
+        // both return zero hits. That is the same silent class as FINDINGS A4 -
+        // a detection on such a field reads as "no attacks". Flag it here so the
+        // loss is queryable (unmapped.oversize) instead of invisible.
+        const OVERSIZE_LIMIT = 4096;
+        const oversizeFields = [];
+        let oversizeMax = 0;
+        const scan = (node, path) => {
+          if (node === null || node === undefined) return;
+          if (typeof node === 'string') {
+            if (node.length > OVERSIZE_LIMIT) {
+              if (oversizeFields.indexOf(path) === -1) oversizeFields.push(path);
+              if (node.length > oversizeMax) oversizeMax = node.length;
+            }
+            return;
+          }
+          if (typeof node !== 'object') return;
+          // collapse array indices: resources[0].name reports as resources.name
+          if (Array.isArray(node)) { node.forEach(v => scan(v, path)); return; }
+          Object.keys(node).forEach(k => scan(node[k], path ? path + '.' + k : k));
+        };
+        scan(out, '');
+        if (oversizeFields.length) {
+          out.unmapped.oversize = true;
+          out.unmapped.oversize_fields = oversizeFields;
+          out.unmapped.oversize_max_len = oversizeMax;
+        }
+
         // Build fresh + wipe, rather than mutate: guarantees no raw k8s field survives past
         // the schema's additionalProperties:false.
         Object.keys(__e).forEach(k => { if (k[0] !== '_') delete __e[k]; });

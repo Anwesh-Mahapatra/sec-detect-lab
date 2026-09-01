@@ -36,6 +36,12 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"        # topics are provisioned deliberately, never by accident
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0       # dev convenience; prod default 3000ms avoids rebalance storms
       KAFKA_LOG_RETENTION_HOURS: 168                  # 7-day broker-level default; overridden per-topic in Phase 2
+      # Sized to match the Fluent Bit tail buffer (8MB) plus protocol overhead.
+      # These two MUST move together: if message.max.bytes exceeds
+      # replica.fetch.max.bytes, followers silently cannot replicate the record
+      # and acks=all never returns. Inert at RF=1, fatal at RF=3.
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 10485760
       KAFKA_HEAP_OPTS: "-Xms512m -Xmx512m"
     volumes:
       - kafka-data:/var/lib/kafka/data
